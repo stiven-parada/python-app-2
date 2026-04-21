@@ -1,0 +1,100 @@
+name: python-app-2-cicd
+
+on:
+  push:
+    paths:
+      - src/**
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - 
+        name: Obtener SHA corto
+        shell : bash
+        run: |
+          echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          push: true
+          tags: stivenparada/python-app-2:python-app-2-dev-latest
+    outputs: 
+      commit_id: ${{ env.COMMIT_ID }}
+  cd:
+    needs: ci
+    runs-on: self-hosted
+    steps:
+      -
+        uses: actions/checkout@v3
+      #-
+        # name: modificar values file
+        #shell: bash
+        # run: |
+        #  echo ${{ needs.ci.outputs.commit_id }}
+        #  sed -i "s/tag: .*/tag: \"${{ needs.ci.outputs.commit_id }}\"/g" charts/python-app-2/values-dev.yaml
+      -
+        name: commit changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: 'Updates values.yaml with commit '
+      - 
+        name: Install argocd
+        shell: bash
+        run: |
+          # 1. Descarga con -L (seguir redirecciones) y -f (fallar si no existe)
+          curl -sSLf -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          
+          # 3. Dar permisos y mover
+          chmod +x argocd
+          sudo mv ./argocd /usr/bin/argocd
+          
+          # 4. Prueba final: imprimir la versión
+          argocd version --client
+      -
+        name: argocd login
+        shell: bash
+        run: | 
+          argocd login argocd-server.argocd \
+            --insecure \
+            --grpc-web \
+            --username admin \
+            --password ${{ secrets.ARGOCD_PASSWORD }}
+      -
+        name: argocd create repo
+        shell: bash
+        run: | 
+
+          #validate if repo exits
+          repo="https://github.com/stiven-parada/python-app-2"
+          argocd repo list | grep -q $repo || argocd repo add $repo
+
+          #create app in argocd
+          argocd app get python-app-2 || argocd app create python-app-2 \
+            --repo $repo \
+            --path charts/python-app-2 \
+            --dest-namespace dev \
+            --dest-server https://kubernetes.default.svc \
+            --values values-dev.yaml \
+            --revision main \
+            --sync-policy manual \
+            --sync-option CreateNamespace=true
+      -
+        name: argocd app sync
+        shell: bash
+        run: | 
+          argocd app sync python-app-2
+          argocd app wait python-app-2 --timeout 180
+        

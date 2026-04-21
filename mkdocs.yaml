@@ -1,0 +1,15 @@
+site_name: 'python-app-2'
+site_description: 'Main documententation for the python-app-2'
+repo_url: https://github.com/stivenparada/python-app-2
+edit_uri: edit/main/docs
+
+plugins:
+  - techdocs-core
+  #- redirects:
+  #    redirect_maps:
+  #      'index.md': 'overview/what-is-backstage.md'
+
+# For sidebar navigation on https://backstage.io/, see `microsite/sidebars.js`
+nav:
+  - Overview:
+      - Getting started: 'docs/index.md'
